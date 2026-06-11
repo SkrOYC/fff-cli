@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use ff_common::{CaseMode, ExecMode, FileType, PatternMode};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GrepParams {
     pub pattern: String,
     #[serde(default)]
@@ -24,6 +25,7 @@ pub struct ContextLines {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FileFilters {
     #[serde(default)]
     pub extensions: Vec<String>,
@@ -39,8 +41,8 @@ pub struct FileFilters {
     pub no_ignore: bool,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum FileTypeFilter {
     File,
     Directory,
@@ -69,6 +71,7 @@ impl From<FileTypeFilter> for FileType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchParams {
     pub pattern: String,
     #[serde(default)]
@@ -84,6 +87,7 @@ pub struct SearchParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FindParams {
     pub expression: String,
     #[serde(default)]
@@ -99,6 +103,7 @@ pub struct FindParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ActionSpec {
     #[serde(rename = "type")]
     pub action_type: ActionType,
@@ -129,6 +134,7 @@ pub struct PingParams {}
 pub struct ShutdownParams {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GrepResultItem {
     pub path: String,
     pub line_number: u32,
@@ -142,6 +148,7 @@ pub struct GrepResultItem {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchResultItem {
     pub path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -153,6 +160,7 @@ pub struct SearchResultItem {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FindResultItem {
     pub path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -176,12 +184,14 @@ pub struct FindResultItem {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct QuerySummary {
     pub total_matched: u64,
     pub elapsed_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FindQuerySummary {
     pub total_matched: u64,
     pub elapsed_ms: u64,
@@ -190,6 +200,7 @@ pub struct FindQuerySummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ActionResult {
     #[serde(rename = "type")]
     pub action_type: String,
@@ -202,6 +213,7 @@ pub struct ActionResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PingResult {
     pub status: String,
     pub version: String,
@@ -246,8 +258,13 @@ mod tests {
         };
 
         let json = serde_json::to_string(&params).unwrap();
-        let decoded: GrepParams = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("caseMode"));
+        assert!(json.contains("contextLines"));
+        assert!(json.contains("maxMatches"));
+        assert!(json.contains("fileTypes"));
+        assert!(json.contains("noIgnore"));
 
+        let decoded: GrepParams = serde_json::from_str(&json).unwrap();
         assert_eq!(decoded.pattern, "TODO");
         assert_eq!(decoded.case_mode, CaseMode::Smart);
         assert_eq!(decoded.context_lines.unwrap().before, 2);
@@ -266,8 +283,12 @@ mod tests {
         };
 
         let json = serde_json::to_string(&params).unwrap();
-        let decoded: SearchParams = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("patternMode"));
+        assert!(json.contains("maxDepth"));
+        assert!(json.contains("minDepth"));
+        assert!(json.contains("maxMatches"));
 
+        let decoded: SearchParams = serde_json::from_str(&json).unwrap();
         assert_eq!(decoded.pattern, r"\.rs$");
         assert_eq!(decoded.pattern_mode, PatternMode::Regex);
         assert_eq!(decoded.max_depth, Some(10));
@@ -290,15 +311,18 @@ mod tests {
         };
 
         let json = serde_json::to_string(&params).unwrap();
-        let decoded: FindParams = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("maxDepth"));
+        assert!(json.contains("followSymlinks"));
+        assert!(json.contains("mountBoundary"));
 
+        let decoded: FindParams = serde_json::from_str(&json).unwrap();
         assert_eq!(decoded.expression, "-name *.rs -type f -size +1k");
         assert_eq!(decoded.actions.len(), 1);
         assert_eq!(decoded.actions[0].action_type, ActionType::Exec);
     }
 
     #[test]
-    fn grep_result_item_roundtrip() {
+    fn grep_result_item_camel_case() {
         let item = GrepResultItem {
             path: "src/main.rs".to_string(),
             line_number: 42,
@@ -310,29 +334,35 @@ mod tests {
         };
 
         let json = serde_json::to_string(&item).unwrap();
-        let decoded: GrepResultItem = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("lineNumber"));
+        assert!(json.contains("lineContent"));
+        assert!(json.contains("matchRanges"));
+        assert!(json.contains("gitStatus"));
+        assert!(json.contains("fileType"));
 
-        assert_eq!(decoded.path, "src/main.rs");
+        let decoded: GrepResultItem = serde_json::from_str(&json).unwrap();
         assert_eq!(decoded.line_number, 42);
         assert_eq!(decoded.match_ranges, vec![(8, 12)]);
     }
 
     #[test]
-    fn query_summary_roundtrip() {
+    fn query_summary_camel_case() {
         let summary = QuerySummary {
             total_matched: 183,
             elapsed_ms: 52,
         };
 
         let json = serde_json::to_string(&summary).unwrap();
-        let decoded: QuerySummary = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("totalMatched"));
+        assert!(json.contains("elapsedMs"));
 
+        let decoded: QuerySummary = serde_json::from_str(&json).unwrap();
         assert_eq!(decoded.total_matched, 183);
         assert_eq!(decoded.elapsed_ms, 52);
     }
 
     #[test]
-    fn ping_result_roundtrip() {
+    fn ping_result_camel_case() {
         let result = PingResult {
             status: "ok".to_string(),
             version: "0.1.0".to_string(),
@@ -343,10 +373,26 @@ mod tests {
         };
 
         let json = serde_json::to_string(&result).unwrap();
-        let decoded: PingResult = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("rootPath"));
+        assert!(json.contains("indexedFiles"));
+        assert!(json.contains("uptimeSeconds"));
+        assert!(json.contains("indexStatus"));
 
+        let decoded: PingResult = serde_json::from_str(&json).unwrap();
         assert_eq!(decoded.status, "ok");
         assert_eq!(decoded.indexed_files, 54321);
+    }
+
+    #[test]
+    fn file_type_filter_kebab_case() {
+        let json = serde_json::to_string(&FileTypeFilter::BlockDevice).unwrap();
+        assert_eq!(json, "\"block-device\"");
+
+        let json = serde_json::to_string(&FileTypeFilter::CharacterDevice).unwrap();
+        assert_eq!(json, "\"character-device\"");
+
+        let decoded: FileTypeFilter = serde_json::from_str("\"block-device\"").unwrap();
+        assert_eq!(decoded, FileTypeFilter::BlockDevice);
     }
 
     #[test]
@@ -372,6 +418,36 @@ mod tests {
     }
 
     #[test]
+    fn case_mode_serializes_lowercase() {
+        let json = serde_json::to_string(&CaseMode::Smart).unwrap();
+        assert_eq!(json, "\"smart\"");
+
+        let json = serde_json::to_string(&CaseMode::Sensitive).unwrap();
+        assert_eq!(json, "\"sensitive\"");
+
+        let json = serde_json::to_string(&CaseMode::Insensitive).unwrap();
+        assert_eq!(json, "\"insensitive\"");
+    }
+
+    #[test]
+    fn pattern_mode_serializes_kebab_case() {
+        let json = serde_json::to_string(&PatternMode::Regex).unwrap();
+        assert_eq!(json, "\"regex\"");
+
+        let json = serde_json::to_string(&PatternMode::FixedString).unwrap();
+        assert_eq!(json, "\"fixed-string\"");
+    }
+
+    #[test]
+    fn exec_mode_serializes_kebab_case() {
+        let json = serde_json::to_string(&ExecMode::PerMatch).unwrap();
+        assert_eq!(json, "\"per-match\"");
+
+        let json = serde_json::to_string(&ExecMode::PerMatchDir).unwrap();
+        assert_eq!(json, "\"per-match-dir\"");
+    }
+
+    #[test]
     fn stream_notification_params() {
         let params = StreamNotificationParams {
             items: serde_json::json!([
@@ -381,5 +457,18 @@ mod tests {
 
         let json = serde_json::to_string(&params).unwrap();
         assert!(json.contains("items"));
+    }
+
+    #[test]
+    fn action_result_camel_case() {
+        let result = ActionResult {
+            action_type: "exec".to_string(),
+            exit_code: Some(0),
+            stdout: Some("output".to_string()),
+            stderr: None,
+        };
+
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("exitCode"));
     }
 }

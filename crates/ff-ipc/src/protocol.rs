@@ -123,8 +123,23 @@ impl JsonRpcError {
     }
 
     #[must_use]
-    pub fn invalid_params(message: impl Into<String>, field: Option<&str>) -> Self {
-        let data = field.map(|f| serde_json::json!({ "field": f }));
+    pub fn invalid_params(
+        message: impl Into<String>,
+        field: Option<&str>,
+        reason: Option<&str>,
+    ) -> Self {
+        let mut data = serde_json::Map::new();
+        if let Some(f) = field {
+            data.insert("field".to_string(), serde_json::json!(f));
+        }
+        if let Some(r) = reason {
+            data.insert("reason".to_string(), serde_json::json!(r));
+        }
+        let data = if data.is_empty() {
+            None
+        } else {
+            Some(serde_json::Value::Object(data))
+        };
         Self {
             code: ErrorCode::InvalidParams as i32,
             message: message.into(),
@@ -169,8 +184,23 @@ impl JsonRpcError {
     }
 
     #[must_use]
-    pub fn feature_not_supported(message: impl Into<String>, suggestion: Option<&str>) -> Self {
-        let data = suggestion.map(|s| serde_json::json!({ "suggestion": s }));
+    pub fn feature_not_supported(
+        message: impl Into<String>,
+        suggestion: Option<&str>,
+        original_flag: Option<&str>,
+    ) -> Self {
+        let mut data = serde_json::Map::new();
+        if let Some(s) = suggestion {
+            data.insert("suggestion".to_string(), serde_json::json!(s));
+        }
+        if let Some(f) = original_flag {
+            data.insert("originalFlag".to_string(), serde_json::json!(f));
+        }
+        let data = if data.is_empty() {
+            None
+        } else {
+            Some(serde_json::Value::Object(data))
+        };
         Self {
             code: ErrorCode::FeatureNotSupported as i32,
             message: message.into(),
@@ -289,7 +319,7 @@ mod tests {
     fn response_error_roundtrip() {
         let response = JsonRpcResponse::error(
             1,
-            JsonRpcError::invalid_params("bad pattern", Some("pattern")),
+            JsonRpcError::invalid_params("bad pattern", Some("pattern"), Some("unclosed")),
         );
 
         let json = serde_json::to_vec(&response).unwrap();
@@ -384,9 +414,19 @@ mod tests {
         let err = JsonRpcError::index_rebuilding();
         assert_eq!(err.code, -1);
 
-        let err = JsonRpcError::feature_not_supported("no PCRE2", Some("rg --pcre2"));
+        let err =
+            JsonRpcError::feature_not_supported("no PCRE2", Some("rg --pcre2"), Some("--pcre2"));
         assert_eq!(err.code, -4);
-        assert!(err.data.is_some());
+        let data = err.data.unwrap();
+        assert_eq!(data["suggestion"], "rg --pcre2");
+        assert_eq!(data["originalFlag"], "--pcre2");
+
+        let err =
+            JsonRpcError::invalid_params("bad regex", Some("pattern"), Some("unclosed group"));
+        assert_eq!(err.code, -32602);
+        let data = err.data.unwrap();
+        assert_eq!(data["field"], "pattern");
+        assert_eq!(data["reason"], "unclosed group");
     }
 
     #[test]

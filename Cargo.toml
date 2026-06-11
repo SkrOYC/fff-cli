@@ -44,3 +44,4 @@ notify-debouncer-mini = "0.7"
 futures-core = "0.3"
 futures-sink = "0.3"
 futures-task = "0.3"
+futures-util = { version = "0.3.31", features = ["sink"] }

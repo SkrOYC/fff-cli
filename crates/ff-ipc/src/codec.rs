@@ -8,6 +8,7 @@ pub const MAX_FRAME_LENGTH: usize = 100 * 1024 * 1024;
 #[derive(Debug)]
 pub struct JsonRpcCodec {
     inner: LengthDelimitedCodec,
+    max_frame_length: usize,
 }
 
 impl Default for JsonRpcCodec {
@@ -24,7 +25,10 @@ impl JsonRpcCodec {
             .length_field_length(4)
             .big_endian()
             .new_codec();
-        Self { inner }
+        Self {
+            inner,
+            max_frame_length: MAX_FRAME_LENGTH,
+        }
     }
 
     #[must_use]
@@ -34,7 +38,10 @@ impl JsonRpcCodec {
             .length_field_length(4)
             .big_endian()
             .new_codec();
-        Self { inner }
+        Self {
+            inner,
+            max_frame_length,
+        }
     }
 }
 
@@ -58,10 +65,10 @@ impl Encoder<JsonRpcMessage> for JsonRpcCodec {
 
     fn encode(&mut self, item: JsonRpcMessage, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let json = item.to_json()?;
-        if json.len() > MAX_FRAME_LENGTH {
+        if json.len() > self.max_frame_length {
             return Err(ProtocolError::MessageTooLarge {
                 size: json.len(),
-                max: MAX_FRAME_LENGTH,
+                max: self.max_frame_length,
             });
         }
         self.inner
@@ -198,6 +205,34 @@ mod tests {
         let result = codec.decode(&mut buf);
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), ProtocolError::JsonParse(_)));
+    }
+
+    #[test]
+    fn connection_remains_open_after_invalid_json() {
+        let mut codec = JsonRpcCodec::new();
+        let mut buf = BytesMut::new();
+
+        let invalid = b"not valid json";
+        let length = (invalid.len() as u32).to_be_bytes();
+        buf.extend_from_slice(&length);
+        buf.extend_from_slice(invalid);
+
+        let request = JsonRpcRequest::new(2, "ping", serde_json::json!({}));
+        codec
+            .encode(JsonRpcMessage::Request(request), &mut buf)
+            .unwrap();
+
+        let result = codec.decode(&mut buf);
+        assert!(result.is_err());
+
+        let decoded = codec.decode(&mut buf).unwrap().unwrap();
+        match decoded {
+            JsonRpcMessage::Request(req) => {
+                assert_eq!(req.id, 2);
+                assert_eq!(req.method, "ping");
+            }
+            _ => panic!("expected request after invalid frame"),
+        }
     }
 
     #[test]

@@ -76,6 +76,7 @@ impl GitStatus {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum CaseMode {
     #[default]
     Smart,
@@ -84,6 +85,7 @@ pub enum CaseMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum PatternMode {
     #[default]
     Regex,
@@ -92,6 +94,7 @@ pub enum PatternMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum ExecMode {
     #[default]
     PerMatch,

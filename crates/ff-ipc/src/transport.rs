@@ -57,34 +57,81 @@ pub fn socket_path(root: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::{JsonRpcMessage, JsonRpcRequest};
-    use futures_core::Stream;
-    use futures_sink::Sink;
-    use std::pin::Pin;
+    use crate::protocol::{JsonRpcMessage, JsonRpcRequest, JsonRpcResponse};
+    use futures_util::{SinkExt, StreamExt};
 
     #[tokio::test]
     async fn unix_socket_roundtrip() {
         let (server_stream, client_stream) = UnixStream::pair().unwrap();
 
-        let mut server: IpcFramed = Framed::new(server_stream, JsonRpcCodec::new());
-        let mut client: IpcFramed = Framed::new(client_stream, JsonRpcCodec::new());
+        let server_handle = tokio::spawn(async move {
+            let mut server: IpcFramed = Framed::new(server_stream, JsonRpcCodec::new());
+            let msg = tokio::time::timeout(std::time::Duration::from_secs(1), server.next())
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            match msg {
+                JsonRpcMessage::Request(req) => {
+                    assert_eq!(req.id, 1);
+                    assert_eq!(req.method, "ping");
+                }
+                _ => panic!("expected request"),
+            }
+        });
 
+        let mut client: IpcFramed = Framed::new(client_stream, JsonRpcCodec::new());
         let request = JsonRpcRequest::new(1, "ping", serde_json::json!({}));
-        Pin::new(&mut client)
-            .start_send(JsonRpcMessage::Request(request))
+        client.send(JsonRpcMessage::Request(request)).await.unwrap();
+
+        server_handle.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn unix_socket_bidirectional() {
+        let (server_stream, client_stream) = UnixStream::pair().unwrap();
+
+        let server_handle = tokio::spawn(async move {
+            let mut server: IpcFramed = Framed::new(server_stream, JsonRpcCodec::new());
+
+            let msg = tokio::time::timeout(std::time::Duration::from_secs(1), server.next())
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+
+            let req = match msg {
+                JsonRpcMessage::Request(req) => req,
+                _ => panic!("expected request"),
+            };
+            assert_eq!(req.id, 42);
+
+            let response = JsonRpcResponse::success(42, serde_json::json!({"totalMatched": 5}));
+            server
+                .send(JsonRpcMessage::Response(response))
+                .await
+                .unwrap();
+        });
+
+        let mut client: IpcFramed = Framed::new(client_stream, JsonRpcCodec::new());
+        let request = JsonRpcRequest::new(42, "grep", serde_json::json!({"pattern": "test"}));
+        client.send(JsonRpcMessage::Request(request)).await.unwrap();
+
+        let msg = tokio::time::timeout(std::time::Duration::from_secs(1), client.next())
+            .await
+            .unwrap()
+            .unwrap()
             .unwrap();
 
-        use tokio::io::AsyncWriteExt;
-        client.get_mut().flush().await.unwrap();
-
-        let received = Pin::new(&mut server).poll_next(&mut std::task::Context::from_waker(
-            futures_task::noop_waker_ref(),
-        ));
-
-        if let std::task::Poll::Ready(Some(Ok(JsonRpcMessage::Request(req)))) = received {
-            assert_eq!(req.id, 1);
-            assert_eq!(req.method, "ping");
+        match msg {
+            JsonRpcMessage::Response(resp) => {
+                assert_eq!(resp.id, 42);
+                assert_eq!(resp.result.unwrap()["totalMatched"], 5);
+            }
+            _ => panic!("expected response"),
         }
+
+        server_handle.await.unwrap();
     }
 
     #[tokio::test]
