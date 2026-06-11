@@ -56,17 +56,20 @@ fn log_dir() -> PathBuf {
 }
 
 fn hash_hex(input: &str) -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+    const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+    const FNV_PRIME: u64 = 0x100000001b3;
 
-    let mut hasher = DefaultHasher::new();
-    input.hash(&mut hasher);
-    let h1 = hasher.finish();
+    let mut h1 = FNV_OFFSET;
+    for byte in input.bytes() {
+        h1 ^= u64::from(byte);
+        h1 = h1.wrapping_mul(FNV_PRIME);
+    }
 
-    let mut hasher2 = DefaultHasher::new();
-    h1.hash(&mut hasher2);
-    input.hash(&mut hasher2);
-    let h2 = hasher2.finish();
+    let mut h2 = FNV_OFFSET;
+    for byte in input.bytes().rev() {
+        h2 ^= u64::from(byte);
+        h2 = h2.wrapping_mul(FNV_PRIME);
+    }
 
     format!("{h1:016x}{h2:016x}")
 }

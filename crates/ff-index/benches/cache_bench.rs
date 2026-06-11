@@ -30,37 +30,34 @@ struct BatchEvictionCache {
     cache: LruCache<PathBuf, Vec<u8>>,
     budget_bytes: usize,
     current_bytes: usize,
-    insert_order: Vec<PathBuf>,
 }
 
 impl BatchEvictionCache {
     fn new(budget_bytes: usize) -> Self {
         Self {
-            cache: LruCache::new(1_000_000),
+            cache: LruCache::new_unbounded(),
             budget_bytes,
             current_bytes: 0,
-            insert_order: Vec::new(),
         }
     }
 
     fn insert(&mut self, path: PathBuf, content: Vec<u8>) {
         let content_size = content.len();
 
-        if let Some(old) = self.cache.insert(path.clone(), content) {
+        if let Some(old) = self.cache.insert(path, content) {
             self.current_bytes -= old.len();
             self.current_bytes += content_size;
-            return;
+        } else {
+            self.current_bytes += content_size;
         }
-
-        self.current_bytes += content_size;
-        self.insert_order.push(path);
 
         if self.current_bytes > self.budget_bytes {
             let target = self.budget_bytes * 80 / 100;
-            while self.current_bytes > target && !self.insert_order.is_empty() {
-                let oldest = self.insert_order.remove(0);
-                if let Some(removed) = self.cache.remove(&oldest) {
-                    self.current_bytes -= removed.len();
+            while self.current_bytes > target {
+                if let Some((_, evicted)) = self.cache.remove_lru() {
+                    self.current_bytes -= evicted.len();
+                } else {
+                    break;
                 }
             }
         }

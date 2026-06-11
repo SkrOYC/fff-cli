@@ -16,7 +16,7 @@ use std::time::Duration;
 /// use std::time::Duration;
 ///
 /// let watcher = FilesystemWatcher::new(std::path::Path::new(".")).unwrap();
-/// while let Some(events) = watcher.try_wait_for_changes(Duration::from_secs(1)) {
+/// while let Ok(Some(events)) = watcher.try_wait_for_changes(Duration::from_secs(1)) {
 ///     println!("Detected {} filesystem events", events.len());
 /// }
 /// ```

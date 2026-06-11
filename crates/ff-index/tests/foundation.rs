@@ -50,11 +50,13 @@ fn integration_scan_large_dataset() {
 
     let bytes_per_entry = 140;
     let metadata_bytes = index.len() * bytes_per_entry;
-    let expected_budget = index.len() * bytes_per_entry;
 
-    assert_eq!(
-        metadata_bytes, expected_budget,
-        "metadata size calculation mismatch"
+    let entries_with_inode = index.entries().iter().filter(|e| e.inode > 0).count();
+    assert!(
+        entries_with_inode > index.len() / 2,
+        "most entries should have valid inodes, got {}/{}",
+        entries_with_inode,
+        index.len()
     );
 
     eprintln!(

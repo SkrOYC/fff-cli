@@ -12,7 +12,6 @@ ff-common = { path = "../ff-common" }
 ignore = { workspace = true }
 hashlink = { workspace = true }
 tracing = { workspace = true }
-globset = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]

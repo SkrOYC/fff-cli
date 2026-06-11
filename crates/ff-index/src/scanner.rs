@@ -76,21 +76,22 @@ pub fn scan(root: &Path, options: &ScanOptions) -> Result<Index, std::io::Error>
             .modified()
             .ok()
             .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
-            .map(|d| d.as_nanos() as i64)
+            .and_then(|d| i64::try_from(d.as_nanos()).ok())
             .unwrap_or(0);
 
         let atime = metadata
             .accessed()
             .ok()
             .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
-            .map(|d| d.as_nanos() as i64)
+            .and_then(|d| i64::try_from(d.as_nanos()).ok())
             .unwrap_or(0);
 
         let ctime = {
             let sec = metadata.ctime();
             let nsec = metadata.ctime_nsec();
-            (sec as i128) * 1_000_000_000 + (nsec as i128)
-        } as i64;
+            let nanos = (sec as i128) * 1_000_000_000 + (nsec as i128);
+            i64::try_from(nanos).unwrap_or(0)
+        };
 
         let git_status = if git_result.in_git_repo {
             git_result
