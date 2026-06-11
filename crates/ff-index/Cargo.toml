@@ -1,0 +1,19 @@
+[package]
+name = "ff-index"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "In-memory file index for ff"
+
+[dependencies]
+ff-common = { path = "../ff-common" }
+ignore = { workspace = true }
+hashlink = { workspace = true }
+tracing = { workspace = true }
+globset = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

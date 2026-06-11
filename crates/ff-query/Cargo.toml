@@ -1,0 +1,18 @@
+[package]
+name = "ff-query"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Query engines for ff"
+
+[dependencies]
+ff-common = { path = "../ff-common" }
+ff-index = { path = "../ff-index" }
+regex = { workspace = true }
+globset = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

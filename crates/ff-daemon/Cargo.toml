@@ -1,0 +1,25 @@
+[package]
+name = "ff-daemon"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Background daemon for ff"
+
+[[bin]]
+name = "ff-daemon"
+path = "src/main.rs"
+
+[dependencies]
+ff-common = { path = "../ff-common" }
+ff-ipc = { path = "../ff-ipc" }
+ff-query = { path = "../ff-query" }
+clap = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
