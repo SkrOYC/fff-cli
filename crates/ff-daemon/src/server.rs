@@ -382,4 +382,58 @@ mod tests {
             handle.await.unwrap();
         }
     }
+
+    #[tokio::test]
+    async fn high_concurrency_queries() {
+        let lifecycle = test_lifecycle();
+        let dispatcher = Arc::new(StubDispatcher);
+
+        {
+            let lc = lifecycle.lock().await;
+            lc.check_and_clean_stale().unwrap();
+            lc.create_pid_file().unwrap();
+        }
+
+        let mut handles = vec![];
+        for i in 0..100 {
+            let (client_stream, server_stream) = tokio::net::UnixStream::pair().unwrap();
+            let dispatcher = dispatcher.clone();
+            let lifecycle = lifecycle.clone();
+
+            handles.push(tokio::spawn(async move {
+                let server_handle = tokio::spawn(async move {
+                    handle_connection(
+                        server_stream,
+                        dispatcher,
+                        lifecycle,
+                        Duration::from_secs(30),
+                    )
+                    .await
+                    .unwrap();
+                });
+
+                let mut client: Framed<_, JsonRpcCodec> =
+                    Framed::new(client_stream, JsonRpcCodec::new());
+                let request = JsonRpcRequest::new(i, "ping", serde_json::json!({}));
+                client.send(JsonRpcMessage::Request(request)).await.unwrap();
+
+                let response = client.next().await.unwrap().unwrap();
+                match response {
+                    JsonRpcMessage::Response(resp) => {
+                        assert_eq!(resp.id, i);
+                        assert!(resp.result.is_some());
+                        assert_eq!(resp.result.unwrap()["status"], "ok");
+                    }
+                    _ => panic!("expected response"),
+                }
+
+                drop(client);
+                server_handle.await.unwrap();
+            }));
+        }
+
+        for handle in handles {
+            handle.await.unwrap();
+        }
+    }
 }
