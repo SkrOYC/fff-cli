@@ -18,6 +18,7 @@ serde = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 criterion = { workspace = true }
+ff-watcher = { path = "../ff-watcher" }
 
 [[bench]]
 name = "cache_bench"
