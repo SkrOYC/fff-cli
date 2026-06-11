@@ -74,8 +74,9 @@ impl FilesystemWatcher {
 
     /// Block until filesystem changes are detected.
     ///
-    /// Returns `None` if the watcher's internal channel is disconnected
-    /// or if the debouncer encountered an error.
+    /// Returns `Err(WatcherError::Disconnected)` if the watcher's internal
+    /// channel is disconnected, or `Err(WatcherError::Internal)` if the
+    /// debouncer encountered an error.
     pub fn wait_for_changes(
         &self,
     ) -> Result<Vec<notify_debouncer_mini::DebouncedEvent>, WatcherError> {

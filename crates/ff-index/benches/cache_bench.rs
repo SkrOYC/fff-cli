@@ -45,7 +45,7 @@ impl BatchEvictionCache {
         let content_size = content.len();
 
         if let Some(old) = self.cache.insert(path, content) {
-            self.current_bytes -= old.len();
+            self.current_bytes = self.current_bytes.saturating_sub(old.len());
             self.current_bytes += content_size;
         } else {
             self.current_bytes += content_size;
@@ -55,7 +55,7 @@ impl BatchEvictionCache {
             let target = self.budget_bytes * 80 / 100;
             while self.current_bytes > target {
                 if let Some((_, evicted)) = self.cache.remove_lru() {
-                    self.current_bytes -= evicted.len();
+                    self.current_bytes = self.current_bytes.saturating_sub(evicted.len());
                 } else {
                     break;
                 }

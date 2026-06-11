@@ -34,6 +34,7 @@ fn integration_scan_small_tree() {
 }
 
 #[test]
+#[ignore = "slow: takes ~100s on large datasets; run explicitly with --include-ignored"]
 fn integration_scan_large_dataset() {
     let Some(root) = get_test_root() else {
         eprintln!("Skipping: no large dataset available (set FF_TEST_ROOT or use NixOS)");

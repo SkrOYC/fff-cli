@@ -75,10 +75,18 @@ pub fn load() -> Config {
 
     if let Some(config_path) = config_file_path()
         && config_path.exists()
-        && let Ok(contents) = std::fs::read_to_string(&config_path)
-        && let Ok(file_config) = toml::from_str::<Config>(&contents)
     {
-        config = file_config;
+        match std::fs::read_to_string(&config_path) {
+            Ok(contents) => match toml::from_str::<Config>(&contents) {
+                Ok(file_config) => config = file_config,
+                Err(e) => {
+                    tracing::warn!("failed to parse config at {}: {e}", config_path.display());
+                }
+            },
+            Err(e) => {
+                tracing::warn!("failed to read config at {}: {e}", config_path.display());
+            }
+        }
     }
 
     apply_env_overrides(&mut config);

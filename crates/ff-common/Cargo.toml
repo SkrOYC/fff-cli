@@ -11,3 +11,4 @@ description = "Shared types and utilities for ff"
 serde = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
+tracing = { workspace = true }
