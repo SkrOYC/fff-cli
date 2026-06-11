@@ -2,5 +2,5 @@
 t = "nextest run"
 tc = "nextest run --workspace"
 b = "build --workspace"
-c = "clippy --workspace --all-targets"
+c = "clippy --workspace --all-targets -- -D warnings"
 f = "fmt --all"

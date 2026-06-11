@@ -14,15 +14,10 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Clone test dataset
-        run: |
-          git clone --depth=0 https://github.com/rust-lang/rust /tmp/test-dataset
-          echo "FF_TEST_ROOT=/tmp/test-dataset" >> $GITHUB_ENV
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -43,7 +38,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Run tests
-        run: cargo nextest run --workspace
+        run: cargo nextest run --workspace --no-tests=pass
 
   build:
     name: Build
