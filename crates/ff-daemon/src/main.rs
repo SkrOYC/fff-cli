@@ -1,6 +1,7 @@
 //! ff-daemon - background daemon for ff.
 
 mod lifecycle;
+mod server;
 
 use std::path::PathBuf;
 use std::sync::Arc;

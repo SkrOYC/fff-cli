@@ -355,9 +355,12 @@ dependencies = [
  "ff-common",
  "ff-ipc",
  "ff-query",
+ "futures-util",
  "libc",
+ "serde_json",
  "tempfile",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
 ]
@@ -401,9 +404,13 @@ version = "0.1.0"
 dependencies = [
  "ff-common",
  "ff-index",
+ "ff-ipc",
  "globset",
  "regex",
+ "serde",
+ "serde_json",
  "tempfile",
+ "tokio",
  "tracing",
 ]
 
