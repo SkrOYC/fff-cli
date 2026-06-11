@@ -19,6 +19,9 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
+futures-core = { workspace = true }
+futures-sink = { workspace = true }
+futures-task = { workspace = true }
 
 [[bench]]
 name = "framing_bench"

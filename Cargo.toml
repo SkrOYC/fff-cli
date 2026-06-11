@@ -41,3 +41,6 @@ tempfile = "3.13"
 criterion = { version = "0.5", features = ["html_reports"] }
 toml = "0.8"
 notify-debouncer-mini = "0.7"
+futures-core = "0.3"
+futures-sink = "0.3"
+futures-task = "0.3"
