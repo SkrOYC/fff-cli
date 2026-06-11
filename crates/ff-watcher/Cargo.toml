@@ -10,12 +10,12 @@ description = "Filesystem watcher for ff"
 [dependencies]
 ff-common = { path = "../ff-common" }
 notify = { workspace = true }
+notify-debouncer-mini = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
 criterion = { workspace = true }
-notify-debouncer-mini = { workspace = true }
 
 [[bench]]
 name = "watcher_bench"
