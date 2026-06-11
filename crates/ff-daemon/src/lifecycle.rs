@@ -162,7 +162,13 @@ impl Drop for DaemonLifecycle {
 
 #[cfg(unix)]
 fn is_process_running(pid: u32) -> bool {
-    unsafe { libc::kill(pid as i32, 0) == 0 }
+    unsafe {
+        let result = libc::kill(pid as i32, 0);
+        if result == 0 {
+            return true;
+        }
+        io::Error::last_os_error().kind() == io::ErrorKind::PermissionDenied
+    }
 }
 
 #[cfg(not(unix))]

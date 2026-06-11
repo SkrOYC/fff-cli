@@ -3,11 +3,12 @@
 mod lifecycle;
 
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
 use clap::Parser;
-use tracing::{error, info};
+use tracing::info;
 
 use lifecycle::DaemonLifecycle;
 
@@ -41,32 +42,48 @@ async fn main() -> Result<()> {
         config.daemon.idle_timeout
     };
 
-    let lifecycle = DaemonLifecycle::new(args.root.clone(), idle_timeout);
+    let lifecycle = Arc::new(tokio::sync::Mutex::new(DaemonLifecycle::new(
+        args.root.clone(),
+        idle_timeout,
+    )));
 
-    lifecycle.check_and_clean_stale()?;
-    lifecycle.create_pid_file()?;
-    let listener = lifecycle.create_socket()?;
+    {
+        let lc = lifecycle.lock().await;
+        lc.check_and_clean_stale()?;
+        lc.create_pid_file()?;
+        let _listener = lc.create_socket()?;
+    }
 
-    let mut shutdown_rx = lifecycle.shutdown_receiver();
+    let mut shutdown_rx = {
+        let lc = lifecycle.lock().await;
+        lc.shutdown_receiver()
+    };
 
-    let idle_check = {
-        let shutdown_tx_clone = lifecycle.shutdown_receiver();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(10));
-            let mut rx = shutdown_tx_clone;
-            loop {
-                tokio::select! {
-                    _ = interval.tick() => {
-                        // Idle check would go here in full implementation
-                    }
-                    _ = rx.changed() => {
+    let idle_lifecycle = lifecycle.clone();
+    let idle_check = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(10));
+        let mut rx = {
+            let lc = idle_lifecycle.lock().await;
+            lc.shutdown_receiver()
+        };
+        loop {
+            tokio::select! {
+                _ = interval.tick() => {
+                    let lc = idle_lifecycle.lock().await;
+                    if lc.is_idle_timed_out() {
+                        info!("idle timeout expired, shutting down");
+                        lc.request_shutdown();
                         break;
                     }
                 }
+                _ = rx.changed() => {
+                    break;
+                }
             }
-        })
-    };
+        }
+    });
 
+    let signal_lifecycle = lifecycle.clone();
     let signal_task = tokio::spawn(async move {
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
@@ -87,28 +104,15 @@ async fn main() -> Result<()> {
                 }
             } => {}
         }
-        lifecycle.request_shutdown();
+        let lc = signal_lifecycle.lock().await;
+        lc.request_shutdown();
     });
 
-    info!(
-        "ff-daemon ready, listening on {}",
-        listener
-            .local_addr()
-            .map(|a| a
-                .as_pathname()
-                .map(|p| p.display().to_string())
-                .unwrap_or_default())
-            .unwrap_or_default()
-    );
+    info!("ff-daemon ready");
 
     tokio::select! {
         _ = shutdown_rx.changed() => {
             info!("shutdown signal received");
-        }
-        result = accept_connections(listener) => {
-            if let Err(e) = result {
-                error!("listener error: {e}");
-            }
         }
     }
 
@@ -116,10 +120,5 @@ async fn main() -> Result<()> {
     idle_check.abort();
 
     info!("ff-daemon shutting down");
-    Ok(())
-}
-
-async fn accept_connections(_listener: tokio::net::UnixListener) -> Result<()> {
-    std::future::pending::<()>().await;
     Ok(())
 }
