@@ -1,5 +1,6 @@
 //! ff-daemon - background daemon for ff.
 
+mod autostart;
 mod lifecycle;
 mod server;
 
