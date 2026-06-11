@@ -1,28 +1,29 @@
 #![allow(dead_code)]
 
-use std::path::Path;
+use std::fs::File;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::Result;
 use tokio::net::UnixStream;
 use tracing::{info, warn};
 
-const SOCKET_WAIT_TIMEOUT: Duration = Duration::from_secs(2);
-const SOCKET_POLL_INTERVAL: Duration = Duration::from_millis(100);
-
 #[derive(Debug)]
 pub struct AutoStartConfig {
-    pub root: std::path::PathBuf,
+    pub root: PathBuf,
+    pub daemon_bin: PathBuf,
     pub socket_wait_timeout: Duration,
     pub socket_poll_interval: Duration,
 }
 
-impl Default for AutoStartConfig {
-    fn default() -> Self {
+impl AutoStartConfig {
+    #[must_use]
+    pub fn new(root: PathBuf, daemon_bin: PathBuf) -> Self {
         Self {
-            root: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
-            socket_wait_timeout: SOCKET_WAIT_TIMEOUT,
-            socket_poll_interval: SOCKET_POLL_INTERVAL,
+            root,
+            daemon_bin,
+            socket_wait_timeout: Duration::from_secs(2),
+            socket_poll_interval: Duration::from_millis(100),
         }
     }
 }
@@ -32,6 +33,7 @@ pub enum DaemonStatus {
     Running,
     NotRunning,
     StaleSocket,
+    PermissionDenied,
 }
 
 pub fn check_daemon_status(socket_path: &Path) -> DaemonStatus {
@@ -41,13 +43,11 @@ pub fn check_daemon_status(socket_path: &Path) -> DaemonStatus {
 
     match std::os::unix::net::UnixStream::connect(socket_path) {
         Ok(_) => DaemonStatus::Running,
-        Err(e) => {
-            if e.kind() == std::io::ErrorKind::ConnectionRefused {
-                DaemonStatus::StaleSocket
-            } else {
-                DaemonStatus::NotRunning
-            }
-        }
+        Err(e) => match e.kind() {
+            std::io::ErrorKind::ConnectionRefused => DaemonStatus::StaleSocket,
+            std::io::ErrorKind::PermissionDenied => DaemonStatus::PermissionDenied,
+            _ => DaemonStatus::NotRunning,
+        },
     }
 }
 
@@ -57,13 +57,17 @@ pub fn cleanup_stale_socket(socket_path: &Path, pid_path: &Path) -> Result<()> {
         info!("removed stale socket: {}", socket_path.display());
     }
 
-    if pid_path.exists() {
-        let pid_str = std::fs::read_to_string(pid_path)?;
-        if let Ok(pid) = pid_str.trim().parse::<u32>()
-            && !is_process_running(pid)
-        {
+    if pid_path.exists()
+        && let Ok(pid_str) = std::fs::read_to_string(pid_path)
+    {
+        if let Ok(pid) = pid_str.trim().parse::<u32>() {
+            if !is_process_running(pid) {
+                std::fs::remove_file(pid_path)?;
+                info!("removed stale PID file: {}", pid_path.display());
+            }
+        } else {
             std::fs::remove_file(pid_path)?;
-            info!("removed stale PID file: {}", pid_path.display());
+            info!("removed corrupted PID file: {}", pid_path.display());
         }
     }
 
@@ -73,6 +77,9 @@ pub fn cleanup_stale_socket(socket_path: &Path, pid_path: &Path) -> Result<()> {
 pub async fn ensure_daemon(config: &AutoStartConfig) -> Result<UnixStream> {
     let socket_path = ff_common::paths::socket_path(&config.root);
     let pid_path = ff_common::paths::pid_path(&config.root);
+    let lock_path = socket_path.with_extension("lock");
+
+    let lock_file = acquire_lock(&lock_path)?;
 
     let status = check_daemon_status(&socket_path);
 
@@ -82,12 +89,20 @@ pub async fn ensure_daemon(config: &AutoStartConfig) -> Result<UnixStream> {
                 "daemon already running, connecting to {}",
                 socket_path.display()
             );
+            drop(lock_file);
             let stream = UnixStream::connect(&socket_path).await?;
             return Ok(stream);
         }
         DaemonStatus::StaleSocket => {
             warn!("stale socket detected, cleaning up");
             cleanup_stale_socket(&socket_path, &pid_path)?;
+        }
+        DaemonStatus::PermissionDenied => {
+            anyhow::bail!(
+                "permission denied connecting to socket at {}. \
+                 Check socket ownership and permissions.",
+                socket_path.display()
+            );
         }
         DaemonStatus::NotRunning => {}
     }
@@ -102,9 +117,47 @@ pub async fn ensure_daemon(config: &AutoStartConfig) -> Result<UnixStream> {
     )
     .await?;
 
+    drop(lock_file);
+
     let stream = UnixStream::connect(&socket_path).await?;
     info!("connected to daemon at {}", socket_path.display());
     Ok(stream)
+}
+
+fn acquire_lock(lock_path: &Path) -> Result<File> {
+    if let Some(parent) = lock_path.parent() {
+        std::fs::create_dir_all(parent)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700))?;
+        }
+    }
+
+    let file = File::create(lock_path)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::io::AsRawFd;
+        let fd = file.as_raw_fd();
+        let ret = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
+        if ret != 0 {
+            let err = std::io::Error::last_os_error();
+            if err.kind() == std::io::ErrorKind::WouldBlock {
+                drop(file);
+                let file = File::open(lock_path)?;
+                let fd = file.as_raw_fd();
+                let ret = unsafe { libc::flock(fd, libc::LOCK_EX) };
+                if ret != 0 {
+                    return Err(std::io::Error::last_os_error().into());
+                }
+                return Ok(file);
+            }
+            return Err(err.into());
+        }
+    }
+
+    Ok(file)
 }
 
 fn spawn_daemon(config: &AutoStartConfig) -> Result<()> {
@@ -117,10 +170,9 @@ fn spawn_daemon(config: &AutoStartConfig) -> Result<()> {
         }
     }
 
-    let daemon_bin = std::env::current_exe()?;
     let root_arg = config.root.to_string_lossy().to_string();
 
-    let child = std::process::Command::new(&daemon_bin)
+    let child = std::process::Command::new(&config.daemon_bin)
         .arg("--root")
         .arg(&root_arg)
         .stdin(std::process::Stdio::null())
@@ -183,11 +235,10 @@ mod tests {
         unsafe {
             std::env::set_var("XDG_RUNTIME_DIR", dir.path());
         }
-        let config = AutoStartConfig {
-            root: dir.path().to_path_buf(),
-            socket_wait_timeout: Duration::from_millis(500),
-            socket_poll_interval: Duration::from_millis(50),
-        };
+        let config = AutoStartConfig::new(
+            dir.path().to_path_buf(),
+            PathBuf::from("/usr/bin/ff-daemon"),
+        );
         (dir, config)
     }
 
@@ -229,6 +280,19 @@ mod tests {
         assert!(!pid_path.exists());
     }
 
+    #[test]
+    fn cleanup_corrupted_pid_file() {
+        let (_dir, config) = test_config();
+        let socket_path = ff_common::paths::socket_path(&config.root);
+        let pid_path = ff_common::paths::pid_path(&config.root);
+
+        std::fs::create_dir_all(socket_path.parent().unwrap()).unwrap();
+        std::fs::write(&pid_path, "not a number").unwrap();
+
+        cleanup_stale_socket(&socket_path, &pid_path).unwrap();
+        assert!(!pid_path.exists());
+    }
+
     #[tokio::test]
     async fn wait_for_socket_timeout() {
         let (_dir, config) = test_config();
@@ -264,9 +328,22 @@ mod tests {
     }
 
     #[test]
-    fn default_config_values() {
-        let config = AutoStartConfig::default();
+    fn config_values() {
+        let config =
+            AutoStartConfig::new(PathBuf::from("/test"), PathBuf::from("/usr/bin/ff-daemon"));
         assert_eq!(config.socket_wait_timeout, Duration::from_secs(2));
         assert_eq!(config.socket_poll_interval, Duration::from_millis(100));
+        assert_eq!(config.daemon_bin, PathBuf::from("/usr/bin/ff-daemon"));
+    }
+
+    #[test]
+    fn lock_file_creation() {
+        let (_dir, config) = test_config();
+        let socket_path = ff_common::paths::socket_path(&config.root);
+        let lock_path = socket_path.with_extension("lock");
+
+        let lock = acquire_lock(&lock_path);
+        assert!(lock.is_ok());
+        assert!(lock_path.exists());
     }
 }
