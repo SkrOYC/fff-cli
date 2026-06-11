@@ -48,7 +48,47 @@ All benchmarks run on Linux x86_64 with criterion 0.5.1. Source: `crates/ff-watc
 
 **Result:** Setting up recursive watches on /nix/store takes ~500ms. This is acceptable for initial daemon startup.
 
+### Event Burst Profiles (Estimated)
+
+Based on typical development workflows and filesystem behavior:
+
+| Operation | Event Count | Duration | Inter-event Gap |
+|-----------|-------------|----------|-----------------|
+| `git checkout <branch>` | 500-5000 | 1-5 s | 0.2-10 ms |
+| `cargo build` | 100-1000 | 2-30 s | 1-100 ms |
+| `npm install` | 1000-50000 | 5-60 s | 0.1-5 ms |
+| Editor save (vim) | 2-5 | 10-50 ms | 5-20 ms |
+| `cargo fmt` | 10-100 | 100-500 ms | 1-10 ms |
+
+**Analysis:**
+- All operations produce bursts of events with sub-10ms inter-event gaps
+- Burst durations range from 10ms (editor save) to 60s (npm install)
+- With 500ms debounce window, we coalesce events within each burst
+- For long operations (npm install), multiple rebuilds may occur (one per 500ms window)
+
 ## Recommendation
+
+### Approach Comparison
+
+| Approach | Complexity | Latency | Event Dropping | Maintenance |
+|----------|-----------|---------|----------------|-------------|
+| notify-debouncer-mini | Low | 500ms | No | Upstream updates |
+| notify-debouncer-full | Medium | 500ms | No | Upstream updates |
+| Custom (notify + timer) | High | Configurable | Possible | Full ownership |
+
+**Decision: Use notify-debouncer-mini**
+
+**Rationale:**
+- Simplest API: just set debounce duration and receive coalesced events
+- Well-tested upstream code (part of notify-rs ecosystem)
+- No need to implement timer management, event coalescing, or edge cases
+- 500ms latency is acceptable for interactive use
+- Lower maintenance burden than custom implementation
+
+**When to consider custom:**
+- Need sub-100ms latency (not required for ff)
+- Need complex coalescing rules (e.g., per-directory batching)
+- Need to integrate with async runtime (tokio) differently
 
 ### Debouncing Strategy: notify-debouncer-mini with 500ms window
 
@@ -70,7 +110,6 @@ All benchmarks run on Linux x86_64 with criterion 0.5.1. Source: `crates/ff-watc
 | Parameter | Value | Rationale |
 |-----------|-------|-----------|
 | Debounce window | 500 ms | Balances responsiveness vs. rebuild frequency |
-| Max batch window | 2 s | Cap total wait time for very long operations |
 | Min events for batch | 1 | Even single events trigger rebuild after window |
 
 ### Implementation Sketch
@@ -135,7 +174,7 @@ impl FilesystemWatcher {
 ## Success Criteria Met
 
 - [x] Debouncing reduces rebuild count by >80% during burst operations
-- [x] Maximum latency from change to rebuild trigger: <3s (500ms debounce + 500ms max batch)
+- [x] Maximum latency from change to rebuild trigger: <1s (500ms debounce window)
 - [x] Works correctly on Linux (inotify) via notify crate
 - [x] No dropped events during debouncing window
 

@@ -47,7 +47,9 @@ fn bench_debouncer_mini_latency(c: &mut Criterion) {
                 let start = Instant::now();
                 fs::write(path.join("test.txt"), "hello").unwrap();
 
-                let _ = rx.recv_timeout(Duration::from_secs(2));
+                let _ = rx
+                    .recv_timeout(Duration::from_secs(2))
+                    .expect("debouncer should emit event within timeout");
                 total += start.elapsed();
 
                 fs::remove_file(path.join("test.txt")).ok();
