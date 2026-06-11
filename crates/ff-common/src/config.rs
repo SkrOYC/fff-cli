@@ -64,6 +64,11 @@ impl Default for QueryConfig {
     }
 }
 
+/// Load configuration with precedence: env vars > config file > defaults.
+///
+/// CLI flag overrides are applied by the caller (e.g., ff-cli) after loading.
+/// Environment variables use the `FF_*` prefix (e.g., `FF_IDLE_TIMEOUT`).
+/// Config file is read from `$XDG_CONFIG_HOME/ff/config.toml` or `~/.config/ff/config.toml`.
 #[must_use]
 pub fn load() -> Config {
     let mut config = Config::default();

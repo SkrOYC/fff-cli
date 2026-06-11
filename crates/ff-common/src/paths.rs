@@ -2,21 +2,21 @@ use std::path::PathBuf;
 
 #[must_use]
 pub fn socket_path(root: &std::path::Path) -> PathBuf {
-    let hash = sha256_hex(root.to_string_lossy().as_ref());
+    let hash = hash_hex(root.to_string_lossy().as_ref());
     let short_hash = &hash[..16];
     runtime_dir().join(format!("{short_hash}.sock"))
 }
 
 #[must_use]
 pub fn pid_path(root: &std::path::Path) -> PathBuf {
-    let hash = sha256_hex(root.to_string_lossy().as_ref());
+    let hash = hash_hex(root.to_string_lossy().as_ref());
     let short_hash = &hash[..16];
     runtime_dir().join(format!("{short_hash}.pid"))
 }
 
 #[must_use]
 pub fn log_path(root: &std::path::Path) -> PathBuf {
-    let hash = sha256_hex(root.to_string_lossy().as_ref());
+    let hash = hash_hex(root.to_string_lossy().as_ref());
     let short_hash = &hash[..16];
     log_dir().join(format!("{short_hash}.log"))
 }
@@ -55,13 +55,20 @@ fn log_dir() -> PathBuf {
     PathBuf::from("/tmp/ff-logs")
 }
 
-fn sha256_hex(input: &str) -> String {
+fn hash_hex(input: &str) -> String {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
     let mut hasher = DefaultHasher::new();
     input.hash(&mut hasher);
-    format!("{:016x}{:016x}", hasher.finish(), hasher.finish())
+    let h1 = hasher.finish();
+
+    let mut hasher2 = DefaultHasher::new();
+    h1.hash(&mut hasher2);
+    input.hash(&mut hasher2);
+    let h2 = hasher2.finish();
+
+    format!("{h1:016x}{h2:016x}")
 }
 
 #[cfg(test)]

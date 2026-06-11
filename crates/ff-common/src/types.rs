@@ -64,11 +64,11 @@ impl GitStatus {
         match (index, worktree) {
             (b'?', b'?') => Self::Untracked,
             (b' ', b' ') => Self::Unmodified,
-            (b' ', b'M') | (b'M', b' ') | (b'M', b'M') => Self::Modified,
-            (b'A', b'A') | (b'A', b' ') => Self::Added,
-            (b'D', b'D') | (b'D', b' ') | (b' ', b'D') => Self::Deleted,
-            (b'R', b'R') | (b'R', b' ') => Self::Renamed,
-            (b'C', b'C') | (b'C', b' ') => Self::Copied,
+            (b' ', b'M') | (b'M', _) => Self::Modified,
+            (b'A', _) => Self::Added,
+            (b'D', _) | (b' ', b'D') => Self::Deleted,
+            (b'R', _) => Self::Renamed,
+            (b'C', _) => Self::Copied,
             (b'U', _) | (_, b'U') => Self::UpdatedButUnmerged,
             _ => Self::NotInGit,
         }
@@ -91,8 +91,9 @@ pub enum PatternMode {
     FixedString,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum ExecMode {
+    #[default]
     PerMatch,
     Batch,
     PerMatchDir,
