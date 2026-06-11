@@ -9,9 +9,12 @@ use std::time::Duration;
 
 use anyhow::Result;
 use clap::Parser;
+use tokio::sync::Mutex;
 use tracing::info;
 
+use ff_query::StubDispatcher;
 use lifecycle::DaemonLifecycle;
+use server::SocketServer;
 
 #[derive(Parser, Debug)]
 #[command(name = "ff-daemon", about = "Background daemon for ff")]
@@ -42,8 +45,9 @@ async fn main() -> Result<()> {
     } else {
         config.daemon.idle_timeout
     };
+    let query_timeout = config.query.query_timeout;
 
-    let lifecycle = Arc::new(tokio::sync::Mutex::new(DaemonLifecycle::new(
+    let lifecycle = Arc::new(Mutex::new(DaemonLifecycle::new(
         args.root.clone(),
         idle_timeout,
     )));
@@ -52,13 +56,14 @@ async fn main() -> Result<()> {
         let lc = lifecycle.lock().await;
         lc.check_and_clean_stale()?;
         lc.create_pid_file()?;
-        let _listener = lc.create_socket()?;
     }
 
-    let mut shutdown_rx = {
-        let lc = lifecycle.lock().await;
-        lc.shutdown_receiver()
-    };
+    let lc = lifecycle.lock().await;
+    let listener = lc.create_socket()?;
+    let shutdown_rx = lc.shutdown_receiver();
+    drop(lc);
+
+    let server = SocketServer::new(listener, StubDispatcher, lifecycle.clone(), query_timeout);
 
     let idle_lifecycle = lifecycle.clone();
     let idle_check = tokio::spawn(async move {
@@ -111,11 +116,7 @@ async fn main() -> Result<()> {
 
     info!("ff-daemon ready");
 
-    tokio::select! {
-        _ = shutdown_rx.changed() => {
-            info!("shutdown signal received");
-        }
-    }
+    server.run(shutdown_rx).await?;
 
     signal_task.abort();
     idle_check.abort();

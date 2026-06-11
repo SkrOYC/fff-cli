@@ -2,12 +2,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
-use ff_ipc::{JsonRpcCodec, JsonRpcError, JsonRpcMessage, JsonRpcRequest, JsonRpcResponse};
+use ff_ipc::{JsonRpcCodec, JsonRpcError, JsonRpcMessage, JsonRpcRequest};
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::UnixListener;
 use tokio::sync::Mutex;
 use tokio_util::codec::Framed;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 use crate::lifecycle::DaemonLifecycle;
 use ff_query::{QueryDispatcher, QueryParams, QueryType, StubDispatcher, parse_query_params};
@@ -56,7 +56,7 @@ impl<D: QueryDispatcher + 'static> SocketServer<D> {
                             });
                         }
                         Err(e) => {
-                            error!("accept error: {e}");
+                            warn!("accept error: {e}");
                         }
                     }
                 }
@@ -85,7 +85,7 @@ async fn handle_connection<D: QueryDispatcher + 'static>(
             Err(e) => {
                 warn!("decode error: {e}");
                 let error_resp =
-                    JsonRpcResponse::error(0, JsonRpcError::parse_error(e.to_string()));
+                    ff_ipc::JsonRpcResponse::error(0, JsonRpcError::parse_error(e.to_string()));
                 framed.send(JsonRpcMessage::Response(error_resp)).await?;
                 continue;
             }
@@ -98,7 +98,15 @@ async fn handle_connection<D: QueryDispatcher + 'static>(
                     lc.notify_activity();
                 }
 
-                let response = process_request(&*dispatcher, &request, query_timeout).await;
+                let (notifications, response) =
+                    process_request(&*dispatcher, &request, query_timeout).await;
+
+                for notification in notifications {
+                    framed
+                        .send(JsonRpcMessage::Notification(notification))
+                        .await?;
+                }
+
                 framed.send(JsonRpcMessage::Response(response)).await?;
 
                 if QueryType::from_method(&request.method) == Some(QueryType::Shutdown) {
@@ -124,13 +132,16 @@ async fn process_request<D: QueryDispatcher>(
     dispatcher: &D,
     request: &JsonRpcRequest,
     query_timeout: Duration,
-) -> JsonRpcResponse {
+) -> (Vec<ff_ipc::JsonRpcNotification>, ff_ipc::JsonRpcResponse) {
     let query_type = match QueryType::from_method(&request.method) {
         Some(qt) => qt,
         None => {
-            return JsonRpcResponse::error(
-                request.id,
-                JsonRpcError::method_not_found(&request.method),
+            return (
+                vec![],
+                ff_ipc::JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError::method_not_found(&request.method),
+                ),
             );
         }
     };
@@ -138,7 +149,7 @@ async fn process_request<D: QueryDispatcher>(
     let params = match parse_query_params(&request.method, request.params.clone()) {
         Ok(p) => p,
         Err(e) => {
-            return JsonRpcResponse::error(request.id, e);
+            return (vec![], ff_ipc::JsonRpcResponse::error(request.id, e));
         }
     };
 
@@ -157,18 +168,16 @@ async fn process_request<D: QueryDispatcher>(
     .await;
 
     match result {
-        Ok(query_result) => {
-            for notification in query_result.notifications {
-                info!("sending notification: {}", notification.method);
-            }
-            query_result.response
-        }
-        Err(_) => JsonRpcResponse::error(
-            request.id,
-            JsonRpcError::internal_error(format!(
-                "query timed out after {}s",
-                query_timeout.as_secs()
-            )),
+        Ok(query_result) => (query_result.notifications, query_result.response),
+        Err(_) => (
+            vec![],
+            ff_ipc::JsonRpcResponse::error(
+                request.id,
+                JsonRpcError::internal_error(format!(
+                    "query timed out after {}s",
+                    query_timeout.as_secs()
+                )),
+            ),
         ),
     }
 }
@@ -213,8 +222,10 @@ mod tests {
     async fn process_ping_request() {
         let dispatcher = StubDispatcher;
         let request = JsonRpcRequest::new(1, "ping", serde_json::json!({}));
-        let response = process_request(&dispatcher, &request, Duration::from_secs(30)).await;
+        let (notifications, response) =
+            process_request(&dispatcher, &request, Duration::from_secs(30)).await;
 
+        assert!(notifications.is_empty());
         assert_eq!(response.id, 1);
         assert!(response.result.is_some());
         let result = response.result.unwrap();
@@ -225,8 +236,10 @@ mod tests {
     async fn process_shutdown_request() {
         let dispatcher = StubDispatcher;
         let request = JsonRpcRequest::new(2, "shutdown", serde_json::json!({}));
-        let response = process_request(&dispatcher, &request, Duration::from_secs(30)).await;
+        let (notifications, response) =
+            process_request(&dispatcher, &request, Duration::from_secs(30)).await;
 
+        assert!(notifications.is_empty());
         assert_eq!(response.id, 2);
         let result = response.result.unwrap();
         assert_eq!(result["status"], "shutting_down");
@@ -236,8 +249,10 @@ mod tests {
     async fn process_unknown_method() {
         let dispatcher = StubDispatcher;
         let request = JsonRpcRequest::new(3, "unknown", serde_json::json!({}));
-        let response = process_request(&dispatcher, &request, Duration::from_secs(30)).await;
+        let (notifications, response) =
+            process_request(&dispatcher, &request, Duration::from_secs(30)).await;
 
+        assert!(notifications.is_empty());
         assert_eq!(response.id, 3);
         assert!(response.error.is_some());
         assert_eq!(response.error.unwrap().code, -32601);
@@ -247,8 +262,10 @@ mod tests {
     async fn process_invalid_params() {
         let dispatcher = StubDispatcher;
         let request = JsonRpcRequest::new(4, "grep", serde_json::json!({"wrong": "fields"}));
-        let response = process_request(&dispatcher, &request, Duration::from_secs(30)).await;
+        let (notifications, response) =
+            process_request(&dispatcher, &request, Duration::from_secs(30)).await;
 
+        assert!(notifications.is_empty());
         assert_eq!(response.id, 4);
         assert!(response.error.is_some());
         assert_eq!(response.error.unwrap().code, -32602);
@@ -262,8 +279,10 @@ mod tests {
             "grep",
             serde_json::json!({"pattern": "TODO", "caseMode": "smart"}),
         );
-        let response = process_request(&dispatcher, &request, Duration::from_secs(30)).await;
+        let (notifications, response) =
+            process_request(&dispatcher, &request, Duration::from_secs(30)).await;
 
+        assert!(notifications.is_empty());
         assert_eq!(response.id, 5);
         assert!(response.result.is_some());
         let result = response.result.unwrap();
