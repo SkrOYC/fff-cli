@@ -22,8 +22,13 @@ impl Default for ScanOptions {
     }
 }
 
+struct GitStatusResult {
+    in_git_repo: bool,
+    statuses: HashMap<std::path::PathBuf, GitStatus>,
+}
+
 pub fn scan(root: &Path, options: &ScanOptions) -> Result<Index, std::io::Error> {
-    let git_statuses = collect_git_status(root);
+    let git_result = collect_git_status(root);
 
     let mut entries = Vec::new();
     let mut walker = WalkBuilder::new(root);
@@ -43,12 +48,18 @@ pub fn scan(root: &Path, options: &ScanOptions) -> Result<Index, std::io::Error>
     for entry in walker.build() {
         let entry = match entry {
             Ok(e) => e,
-            Err(_) => continue,
+            Err(e) => {
+                tracing::warn!("failed to read entry: {e}");
+                continue;
+            }
         };
 
         let metadata = match entry.metadata() {
             Ok(m) => m,
-            Err(_) => continue,
+            Err(e) => {
+                tracing::warn!("failed to read metadata for {:?}: {e}", entry.path());
+                continue;
+            }
         };
 
         let path = entry
@@ -75,17 +86,21 @@ pub fn scan(root: &Path, options: &ScanOptions) -> Result<Index, std::io::Error>
             .map(|d| d.as_nanos() as i64)
             .unwrap_or(0);
 
-        let ctime = metadata
-            .created()
-            .ok()
-            .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
-            .map(|d| d.as_nanos() as i64)
-            .unwrap_or(0);
+        let ctime = {
+            let sec = metadata.ctime();
+            let nsec = metadata.ctime_nsec();
+            (sec as i128) * 1_000_000_000 + (nsec as i128)
+        } as i64;
 
-        let git_status = git_statuses
-            .get(&path)
-            .copied()
-            .unwrap_or(GitStatus::NotInGit);
+        let git_status = if git_result.in_git_repo {
+            git_result
+                .statuses
+                .get(&path)
+                .copied()
+                .unwrap_or(GitStatus::Unmodified)
+        } else {
+            GitStatus::NotInGit
+        };
 
         entries.push(FileEntry {
             path,
@@ -109,18 +124,26 @@ pub fn scan(root: &Path, options: &ScanOptions) -> Result<Index, std::io::Error>
     Ok(index)
 }
 
-fn collect_git_status(root: &Path) -> HashMap<std::path::PathBuf, GitStatus> {
+fn collect_git_status(root: &Path) -> GitStatusResult {
     let output = match std::process::Command::new("git")
         .args(["status", "--porcelain=v1", "-uall"])
         .current_dir(root)
         .output()
     {
         Ok(o) => o,
-        Err(_) => return HashMap::new(),
+        Err(_) => {
+            return GitStatusResult {
+                in_git_repo: false,
+                statuses: HashMap::new(),
+            };
+        }
     };
 
     if !output.status.success() {
-        return HashMap::new();
+        return GitStatusResult {
+            in_git_repo: false,
+            statuses: HashMap::new(),
+        };
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -133,14 +156,22 @@ fn collect_git_status(root: &Path) -> HashMap<std::path::PathBuf, GitStatus> {
 
         let index_byte = line.as_bytes()[0];
         let worktree_byte = line.as_bytes()[1];
-        let path_str = &line[3..];
+
+        let path_str = if (index_byte == b'R' || index_byte == b'C') && line.contains(" -> ") {
+            line[3..].split(" -> ").last().unwrap_or(&line[3..])
+        } else {
+            &line[3..]
+        };
 
         let path = std::path::PathBuf::from(path_str);
         let status = GitStatus::from_porcelain(index_byte, worktree_byte);
         statuses.insert(path, status);
     }
 
-    statuses
+    GitStatusResult {
+        in_git_repo: true,
+        statuses,
+    }
 }
 
 #[cfg(test)]
