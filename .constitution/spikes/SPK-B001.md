@@ -18,42 +18,52 @@ All benchmarks run on Linux x86_64 with criterion 0.5. Source: `crates/ff-ipc/be
 
 | Method | Time | Throughput | Overhead |
 |--------|------|-----------|----------|
-| Raw JSON serialize only | 141.44 µs | 1.078 GiB/s | baseline |
-| Length-prefixed (serialize + frame) | 142.74 µs | 1.073 GiB/s | **+0.9%** |
+| Raw JSON serialize only | 142.49 µs | 1.081 GiB/s | baseline |
+| Length-prefixed (serialize + frame) | 148.36 µs | 1.039 GiB/s | **+4.1%** |
 
-**Result:** Length-prefixed framing overhead is **0.9%**, well under the 5% target.
+**Result:** Length-prefixed framing overhead is **4.1%**, under the 5% target.
 
 ### Length-Prefixed Codec Performance (1000 items, ~170KB JSON)
 
 | Operation | Time | Throughput |
 |-----------|------|-----------|
-| Encode (serialize + frame) | 5.89 µs | 25.99 GiB/s |
-| Decode (frame + deserialize) | 428.88 µs | 367 MiB/s |
-| Full roundtrip | 432.61 µs | 363.91 MiB/s |
+| Frame only (no serialization) | 7.03 µs | 21.91 GiB/s |
+| Decode (frame + deserialize) | 591.84 µs | 266.62 MiB/s |
+| Full roundtrip | 525.16 µs | 300.46 MiB/s |
 
-**Result:** Encoding is extremely fast (encode is 72x faster than decode because decode includes JSON deserialization). The codec itself adds negligible cost.
+**Result:** Codec framing itself is extremely fast (7 µs). JSON deserialization dominates decode cost.
 
 ### Batch Size Comparison (10,000 items total)
 
-| Strategy | Time | Throughput | Notes |
-|----------|------|-----------|-------|
-| Batch 10 (1000 notifications) | 2.37 ms | 4.19 Melem/s | Too many small messages |
-| Batch 100 (100 notifications) | 2.44 ms | 4.07 Melem/s | **Recommended** |
-| Batch 1000 (10 notifications) | 2.39 ms | 4.16 Melem/s | Good throughput |
-| Single notification (10,000 items) | 2.63 ms | 3.78 Melem/s | Largest single payload |
+| Strategy | Time | Throughput | vs Per-Item |
+|----------|------|-----------|-------------|
+| Per-item (batch 1) | 5.53 ms | 1.81 Melem/s | baseline |
+| Batch 10 (1000 notifications) | 2.69 ms | 3.72 Melem/s | **2.1x faster** |
+| Batch 100 (100 notifications) | 2.59 ms | 3.86 Melem/s | **2.1x faster** |
+| Batch 1000 (10 notifications) | 2.63 ms | 3.80 Melem/s | **2.1x faster** |
+| Single notification (10,000 items) | 2.70 ms | 3.70 Melem/s | **2.0x faster** |
 
-**Result:** Batch sizes 100 and 1000 perform nearly identically. Batch 100 is recommended as the default because it balances latency (first results arrive quickly) with throughput.
+**Result:** Any batch size ≥10 is ~2.1x faster than per-item. Batch 100 is recommended for latency/throughput balance.
 
 ### Streaming Throughput (100,000 items, batch 100)
 
 | Metric | Value |
 |--------|-------|
-| Total time | 24.8 ms |
-| Throughput | 4.03 Melem/s |
+| Total serialization time | 25.56 ms |
+| Throughput | 3.91 Melem/s |
 | Notifications sent | 1000 |
 | Final response | 1 |
 
-**Result:** 100k items streamed in ~25ms. No memory issues, no backpressure problems.
+**Result:** 100k items serialized in ~26ms. No memory issues.
+
+### Cancellation Latency
+
+| Metric | Value |
+|--------|-------|
+| Client disconnect → server detection | **2.14 ms** |
+| Target | <100 ms |
+
+**Result:** Cancellation detected in **2.14ms**, well under the 100ms target. Server detects broken pipe when socket buffer fills during write.
 
 ## Protocol Specification
 
@@ -97,10 +107,10 @@ Daemon → CLI: Response (id=1, result={totalMatched, elapsedMs})     // final
 **Default: 100 items per notification**
 
 **Rationale:**
-- Benchmarks show batch 100 and 1000 have nearly identical throughput
-- Batch 100 means first results arrive in ~2.5ms (vs ~24ms for batch 1000)
-- Lower latency for interactive use (user sees results immediately)
+- Benchmarks show batch 100 and 1000 have nearly identical throughput (3.86 vs 3.80 Melem/s)
+- Batch 100 means first results arrive sooner (lower latency for interactive use)
 - 100 items × ~170 bytes/item ≈ 17KB per notification (well within socket buffer)
+- 2.1x faster than per-item notifications
 
 **Configurable:** Batch size can be overridden via `FF_BATCH_SIZE` env var or config file for specialized use cases.
 
@@ -111,31 +121,11 @@ Daemon → CLI: Response (id=1, result={totalMatched, elapsedMs})     // final
 **How it works:**
 1. Unix socket has a kernel buffer (default ~212KB on Linux, configurable via `SO_SNDBUF`/`SO_RCVBUF`)
 2. When daemon writes faster than CLI reads, the socket buffer fills
-3. `tokio_util::codec::FramedWrite::send()` returns `Poll::Pending` when buffer is full
+3. The `send()` future yields `Pending` when the socket buffer is full
 4. Daemon's query loop uses `tokio::select!` — when send is pending, query processing pauses
 5. When CLI catches up and reads data, the send completes and query resumes
 
 **No explicit flow control needed.** The OS socket buffer provides natural backpressure.
-
-**Socket buffer tuning (optional):**
-```rust
-use std::os::unix::io::AsRawFd;
-
-fn set_socket_buffer_sizes(stream: &tokio::net::UnixStream) -> std::io::Result<()> {
-    let fd = stream.as_raw_fd();
-    // Set send buffer to 1MB for daemon (allows more buffering)
-    unsafe {
-        libc::setsockopt(
-            fd,
-            libc::SOL_SOCKET,
-            libc::SO_SNDBUF,
-            &(1024 * 1024) as *const _ as *const libc::c_void,
-            std::mem::size_of::<i32>() as libc::socklen_t,
-        );
-    }
-    Ok(())
-}
-```
 
 ### Cancellation Mechanism
 
@@ -143,10 +133,12 @@ fn set_socket_buffer_sizes(stream: &tokio::net::UnixStream) -> std::io::Result<(
 
 **How it works:**
 1. Daemon sends notifications via `FramedWrite::send()`
-2. If CLI disconnects (Ctrl+C, timeout, crash), the next `send()` returns an error
+2. If CLI disconnects (Ctrl+C, timeout, crash), the next `send()` fails with a broken pipe error
 3. Daemon catches the error, cancels the query via `tokio_util::sync::CancellationToken`
 4. Query engine stops processing, releases resources
 5. Daemon cleans up the connection
+
+**Cancellation latency:** Empirically measured at **2.14ms** from client disconnect to server detection. This is well under the 100ms target.
 
 **Implementation sketch:**
 ```rust
@@ -188,8 +180,6 @@ async fn handle_query(
     Ok(())
 }
 ```
-
-**Cancellation latency:** When client disconnects, the next `send()` fails immediately (broken pipe). Query cancellation occurs within **one batch cycle** (~2.5ms for batch 100 at full throughput). This is well under the 100ms target.
 
 ### Error Handling Mid-Stream
 
@@ -331,11 +321,11 @@ async fn execute_query(
 
 ## Success Criteria Met
 
-- [x] Streaming protocol handles 100k results without memory issues (24.8ms, 4.03 Melem/s)
+- [x] Streaming protocol handles 100k results without memory issues (25.56ms, 3.91 Melem/s)
 - [x] Backpressure works correctly (tokio socket buffer provides natural backpressure)
-- [x] Cancellation stops query within 100ms of client disconnect (achieved in ~2.5ms, one batch cycle)
-- [x] Batch size optimization reduces overhead by >50% vs. per-item notifications (batch 100 is 9x faster than per-item due to amortized serialization cost)
-- [x] Length-prefixed framing overhead <5% (achieved 0.9%)
+- [x] Cancellation stops query within 100ms of client disconnect (measured **2.14ms**)
+- [x] Batch size optimization reduces overhead vs. per-item notifications (batch 100 is **2.1x faster**)
+- [x] Length-prefixed framing overhead <5% (measured **4.1%**)
 
 ## Recommendation
 
@@ -350,9 +340,10 @@ Use **notification stream + final response** (Option A):
 ### Batch Size
 
 Use **100 items per notification** as default:
-- First results arrive in ~2.5ms (interactive latency)
-- Throughput matches batch 1000 (4.03 vs 4.16 Melem/s)
+- First results arrive quickly (interactive latency)
+- Throughput matches batch 1000 (3.86 vs 3.80 Melem/s)
 - 17KB per notification fits comfortably in socket buffer
+- 2.1x faster than per-item notifications
 - Configurable via `FF_BATCH_SIZE` env var
 
 ### Codec Configuration
@@ -365,7 +356,7 @@ Use `tokio_util::codec::LengthDelimitedCodec`:
 ### Cancellation
 
 Use `tokio_util::sync::CancellationToken`:
-- Cancel query on client disconnect (broken pipe)
+- Cancel query on client disconnect (broken pipe, detected in ~2ms)
 - Cancel query on timeout (tokio::time::timeout)
 - Propagate cancellation to query engine via shared token
 

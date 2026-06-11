@@ -380,6 +380,7 @@ name = "ff-ipc"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "criterion",
  "ff-common",
  "serde",
  "serde_json",
