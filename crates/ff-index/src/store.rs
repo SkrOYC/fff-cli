@@ -1,3 +1,4 @@
+use crate::content::ContentCache;
 use crate::entry::FileEntry;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -8,6 +9,7 @@ pub struct Index {
     entries: Vec<FileEntry>,
     path_to_index: HashMap<PathBuf, usize>,
     root: PathBuf,
+    content_cache: Option<ContentCache>,
     rebuilding: AtomicBool,
     last_rebuild: Instant,
 }
@@ -19,6 +21,19 @@ impl Index {
             entries: Vec::new(),
             path_to_index: HashMap::new(),
             root,
+            content_cache: None,
+            rebuilding: AtomicBool::new(false),
+            last_rebuild: Instant::now(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_content_cache(root: PathBuf, budget_bytes: usize) -> Self {
+        Self {
+            entries: Vec::new(),
+            path_to_index: HashMap::new(),
+            root,
+            content_cache: Some(ContentCache::new(budget_bytes)),
             rebuilding: AtomicBool::new(false),
             last_rebuild: Instant::now(),
         }
@@ -52,6 +67,24 @@ impl Index {
     }
 
     #[must_use]
+    pub fn get_content(&mut self, path: &Path) -> Option<&Vec<u8>> {
+        let path_buf = path.to_path_buf();
+        self.content_cache.as_mut()?.get(&path_buf)
+    }
+
+    pub fn cache_content(&mut self, path: PathBuf, content: Vec<u8>) {
+        if let Some(ref mut cache) = self.content_cache {
+            cache.insert(path, content);
+        }
+    }
+
+    pub fn drop_content_cache(&mut self) {
+        if let Some(ref mut cache) = self.content_cache {
+            cache.drop_all();
+        }
+    }
+
+    #[must_use]
     pub fn is_rebuilding(&self) -> bool {
         self.rebuilding.load(Ordering::Acquire)
     }
@@ -72,6 +105,7 @@ impl Index {
         }
         self.entries = entries;
         self.last_rebuild = Instant::now();
+        self.drop_content_cache();
     }
 }
 

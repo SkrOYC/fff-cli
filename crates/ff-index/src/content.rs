@@ -5,17 +5,15 @@ pub struct ContentCache {
     cache: LruCache<PathBuf, Vec<u8>>,
     budget_bytes: usize,
     current_bytes: usize,
-    insert_order: Vec<PathBuf>,
 }
 
 impl ContentCache {
     #[must_use]
     pub fn new(budget_bytes: usize) -> Self {
         Self {
-            cache: LruCache::new(1_000_000),
+            cache: LruCache::new_unbounded(),
             budget_bytes,
             current_bytes: 0,
-            insert_order: Vec::new(),
         }
     }
 
@@ -46,24 +44,14 @@ impl ContentCache {
             return;
         }
 
-        if let Some(old) = self.cache.insert(path.clone(), content) {
+        if let Some(old) = self.cache.insert(path, content) {
             self.current_bytes = self.current_bytes.saturating_sub(old.len());
             self.current_bytes += content_size;
-            return;
+        } else {
+            self.current_bytes += content_size;
         }
 
-        self.current_bytes += content_size;
-        self.insert_order.push(path);
-
-        if self.current_bytes > self.budget_bytes {
-            let target = self.budget_bytes * 80 / 100;
-            while self.current_bytes > target && !self.insert_order.is_empty() {
-                let oldest = self.insert_order.remove(0);
-                if let Some(removed) = self.cache.remove(&oldest) {
-                    self.current_bytes = self.current_bytes.saturating_sub(removed.len());
-                }
-            }
-        }
+        self.evict_if_over_budget();
     }
 
     pub fn get(&mut self, path: &PathBuf) -> Option<&Vec<u8>> {
@@ -73,7 +61,6 @@ impl ContentCache {
     pub fn remove(&mut self, path: &PathBuf) -> Option<Vec<u8>> {
         if let Some(removed) = self.cache.remove(path) {
             self.current_bytes = self.current_bytes.saturating_sub(removed.len());
-            self.insert_order.retain(|p| p != path);
             Some(removed)
         } else {
             None
@@ -83,7 +70,21 @@ impl ContentCache {
     pub fn drop_all(&mut self) {
         self.cache.clear();
         self.current_bytes = 0;
-        self.insert_order.clear();
+    }
+
+    fn evict_if_over_budget(&mut self) {
+        if self.current_bytes <= self.budget_bytes {
+            return;
+        }
+
+        let target = self.budget_bytes * 80 / 100;
+        while self.current_bytes > target {
+            if let Some((_, evicted)) = self.cache.remove_lru() {
+                self.current_bytes = self.current_bytes.saturating_sub(evicted.len());
+            } else {
+                break;
+            }
+        }
     }
 }
 
@@ -127,16 +128,23 @@ mod tests {
     }
 
     #[test]
-    fn eviction_targets_80_percent() {
+    fn lru_promotion_keeps_recent_entries() {
         let mut cache = ContentCache::new(100);
 
-        for i in 0..15 {
+        for i in 0..10 {
             let path = PathBuf::from(format!("file{i}.txt"));
-            let content = vec![b'x'; 10];
-            cache.insert(path, content);
+            cache.insert(path, vec![b'x'; 10]);
         }
 
-        assert!(cache.current_bytes() <= 100);
+        let old_path = PathBuf::from("file0.txt");
+        cache.get(&old_path);
+
+        for i in 10..15 {
+            let path = PathBuf::from(format!("file{i}.txt"));
+            cache.insert(path, vec![b'x'; 10]);
+        }
+
+        assert!(cache.get(&old_path).is_some());
     }
 
     #[test]
@@ -193,5 +201,21 @@ mod tests {
         cache.insert(path.clone(), vec![b'y'; 20]);
         assert_eq!(cache.current_bytes(), 20);
         assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn update_triggers_eviction() {
+        let mut cache = ContentCache::new(100);
+
+        for i in 0..10 {
+            let path = PathBuf::from(format!("file{i}.txt"));
+            cache.insert(path, vec![b'x'; 10]);
+        }
+        assert_eq!(cache.current_bytes(), 100);
+
+        let path = PathBuf::from("file0.txt");
+        cache.insert(path, vec![b'y'; 50]);
+
+        assert!(cache.current_bytes() <= 100);
     }
 }
