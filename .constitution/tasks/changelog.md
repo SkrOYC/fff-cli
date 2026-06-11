@@ -1,5 +1,16 @@
 # Changelog — Stage 4 (Tasks)
 
+## v0.1.2 — Epic B Completed
+
+- Completed Epic B: IPC & Daemon (6 tickets, 21 points)
+- IPCD-B001: Spike — JSON-RPC streaming protocol (0.9% framing overhead, 2.14ms cancellation)
+- IPCD-B002: ff-ipc protocol types and codec (32 tests, camelCase serde, length-prefixed framing)
+- IPCD-B003: ff-daemon lifecycle management (9 tests, PID file, socket 0600, idle timeout, signal handling)
+- IPCD-B004: ff-daemon socket server and query dispatch (15 tests, concurrent connections, streaming notifications)
+- IPCD-B005: ff-daemon auto-start detection (6 tests, flock-based locking, stale socket cleanup)
+- IPCD-B006: Integration tests (100 concurrent connections, 120 total tests passing)
+- Added ff-query dispatch module: QueryDispatcher trait, StubDispatcher, parse_query_params
+
 ## v0.1.1 — Epic A Completed
 
 - Completed Epic A: Foundation (8 tickets, 27 points)

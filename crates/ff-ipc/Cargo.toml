@@ -16,3 +16,14 @@ tokio-util = { workspace = true }
 bytes = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+futures-core = { workspace = true }
+futures-sink = { workspace = true }
+futures-task = { workspace = true }
+futures-util = { workspace = true }
+
+[[bench]]
+name = "framing_bench"
+harness = false
