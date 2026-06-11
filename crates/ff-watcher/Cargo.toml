@@ -14,3 +14,9 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+criterion = { workspace = true }
+notify-debouncer-mini = { workspace = true }
+
+[[bench]]
+name = "watcher_bench"
+harness = false
