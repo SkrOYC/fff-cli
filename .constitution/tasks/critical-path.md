@@ -1,34 +1,33 @@
 # Critical Path
 
-**Version:** v0.1.0
+**Version:** v0.2.0
 
 ## Active Backlog Summary
 
-**Total Active Story Points:** 120  
-**Total Active Tickets:** 34  
-**Total Spikes:** 2  
-**Total Epics:** 7
+**Total Active Story Points:** 99  
+**Total Active Tickets:** 28  
+**Total Spikes:** 1  
+**Total Epics:** 6
 
 ## Critical Path
 
 The critical path runs through the metadata query chain, which has the deepest dependency chain:
 
-1. **IPCD-B001** — Spike: JSON-RPC Streaming Protocol
-2. **IPCD-B002** — ff-ipc: Protocol Types and Codec
-3. **IPCD-B003** — ff-daemon: Lifecycle Management
-4. **IPCD-B004** — ff-daemon: Socket Server
-5. **METAP-E001** — Predicate Types and Evaluator
-6. **METAP-E002** — Spike: Find Expression Parser
-7. **METAP-E003** — Expression Parser
-8. **METAP-E004** — Metadata Query Engine
-9. **META-F001** — Action Executor
-10. **META-F003** — find Subcommand
-11. **CLIO-G001** — Main Dispatch and Daemon Client
-12. **CLIO-G002** — One-Shot Mode
-13. **PLSH-H003** — Comprehensive Compatibility Tests
-14. **PLSH-H004** — Benchmark Suite and Release
+1. **IPCD-B002** — ff-ipc: Protocol Types and Codec ✅
+2. **IPCD-B003** — ff-daemon: Lifecycle Management ✅
+3. **IPCD-B004** — ff-daemon: Socket Server ✅
+4. **METAP-E001** — Predicate Types and Evaluator
+5. **METAP-E002** — Spike: Find Expression Parser
+6. **METAP-E003** — Expression Parser
+7. **METAP-E004** — Metadata Query Engine
+8. **META-F001** — Action Executor
+9. **META-F003** — find Subcommand
+10. **CLIO-G001** — Main Dispatch and Daemon Client
+11. **CLIO-G002** — One-Shot Mode
+12. **PLSH-H003** — Comprehensive Compatibility Tests
+13. **PLSH-H004** — Benchmark Suite and Release
 
-**Critical path story points:** 84 of 120 total (70%)
+**Critical path story points:** 63 of 99 total (64%)
 
 ## Build Order Diagram
 
@@ -45,13 +44,13 @@ flowchart LR
         A008[FOUND-A008]:::done
     end
 
-    subgraph "Epic B: IPC & Daemon"
-        B001[IPCD-B001]
-        B002[IPCD-B002]
-        B003[IPCD-B003]
-        B004[IPCD-B004]
-        B005[IPCD-B005]
-        B006[IPCD-B006]
+    subgraph "Epic B: IPC & Daemon ✅"
+        B001[IPCD-B001]:::done
+        B002[IPCD-B002]:::done
+        B003[IPCD-B003]:::done
+        B004[IPCD-B004]:::done
+        B005[IPCD-B005]:::done
+        B006[IPCD-B006]:::done
     end
 
     subgraph "Epic C: Content Search"

@@ -1,5 +1,14 @@
 # Changelog — Stage 3 (TechSpec)
 
+## v0.1.2 — Epic B Implementation
+
+- Implemented ff-ipc crate: JSON-RPC 2.0 protocol types (Request, Response, Notification, Error), LengthDelimitedCodec with 4-byte big-endian framing, Unix socket transport, all RPC method parameter schemas (GrepParams, SearchParams, FindParams, etc.)
+- Implemented ff-daemon crate: DaemonLifecycle (PID file, socket 0600, idle timeout, stale detection, signal handling), SocketServer (concurrent connections, streaming notifications, query timeout), auto-start detection (flock-based locking, daemon spawning, socket wait)
+- Implemented ff-query dispatch module: QueryDispatcher trait, StubDispatcher, QueryType enum, parse_query_params
+- Added serde rename_all attributes: camelCase for protocol structs, kebab-case for FileTypeFilter, lowercase/kebab-case for ff-common enums
+- Added futures-core, futures-sink, futures-task, futures-util dependencies for Stream/Sink support
+- Completed spike SPK-B001: JSON-RPC streaming protocol (notification stream + final response, batch 100, 4.1% framing overhead)
+
 ## v0.1.1 — Epic A Implementation
 
 - Implemented ff-common crate: shared types (FileType, GitStatus, CaseMode, PatternMode, ExecMode), config loading (TOML + env overrides), path computation (XDG-compliant), error types
