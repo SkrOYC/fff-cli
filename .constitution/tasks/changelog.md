@@ -1,5 +1,18 @@
 # Changelog — Stage 4 (Tasks)
 
+## v0.1.1 — Epic A Completed
+
+- Completed Epic A: Foundation (8 tickets, 27 points)
+- FOUND-A001: Workspace scaffolding with 7 crates
+- FOUND-A002: Content cache eviction spike (3.1% overhead, batch eviction to 80%)
+- FOUND-A003: ff-common types, config, paths, errors (18 tests)
+- FOUND-A004: ff-index core, scanner, git status (11 tests)
+- FOUND-A005: Content cache with byte-based LRU (9 tests)
+- FOUND-A006: Watcher debouncing spike (500ms window recommended)
+- FOUND-A007: FilesystemWatcher implementation (4 tests)
+- FOUND-A008: Integration tests (7 tests)
+- Total: 49 tests passing across foundation crates
+
 ## v0.1.0 — Initial Task Plan
 
 - Decomposed 72 capabilities (P0 + P1) into 8 epics with 42 tickets

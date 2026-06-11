@@ -1,5 +1,14 @@
 # Changelog — Stage 3 (TechSpec)
 
+## v0.1.1 — Epic A Implementation
+
+- Implemented ff-common crate: shared types (FileType, GitStatus, CaseMode, PatternMode, ExecMode), config loading (TOML + env overrides), path computation (XDG-compliant), error types
+- Implemented ff-index crate: FileEntry struct, Index (HashMap+Vec), scanner (ignore crate), git status collection, ContentCache (hashlink LruCache with byte-based batch eviction)
+- Implemented ff-watcher crate: FilesystemWatcher (notify-debouncer-mini, 500ms debounce)
+- Added benchmarks for content cache eviction (3.1% overhead) and watcher debouncing
+- Added integration tests for foundation crates
+- Completed spikes: SPK-A001 (content cache eviction), SPK-A002 (watcher debouncing)
+
 ## v0.1.0 — Initial TechSpec
 
 - Established technical stack: Rust 1.96+ / 2024 edition

@@ -4,46 +4,45 @@
 
 ## Active Backlog Summary
 
-**Total Active Story Points:** 147  
-**Total Active Tickets:** 42  
-**Total Spikes:** 4  
-**Total Epics:** 8
+**Total Active Story Points:** 120  
+**Total Active Tickets:** 34  
+**Total Spikes:** 2  
+**Total Epics:** 7
 
 ## Critical Path
 
 The critical path runs through the metadata query chain, which has the deepest dependency chain:
 
-1. **FOUND-A001** — Workspace Scaffolding
-2. **FOUND-A003** — ff-common: Shared Types
-3. **FOUND-A004** — ff-index: Core Index and Scanner
-4. **IPCD-B002** — ff-ipc: Protocol Types and Codec
-5. **IPCD-B003** — ff-daemon: Lifecycle Management
-6. **IPCD-B004** — ff-daemon: Socket Server
-7. **METAP-E001** — Predicate Types and Evaluator
-8. **METAP-E003** — Expression Parser
-9. **METAP-E004** — Metadata Query Engine
-10. **META-F001** — Action Executor
-11. **META-F003** — find Subcommand
-12. **CLIO-G001** — Main Dispatch and Daemon Client
-13. **CLIO-G002** — One-Shot Mode
-14. **PLSH-H003** — Comprehensive Compatibility Tests
-15. **PLSH-H004** — Benchmark Suite and Release
+1. **IPCD-B001** — Spike: JSON-RPC Streaming Protocol
+2. **IPCD-B002** — ff-ipc: Protocol Types and Codec
+3. **IPCD-B003** — ff-daemon: Lifecycle Management
+4. **IPCD-B004** — ff-daemon: Socket Server
+5. **METAP-E001** — Predicate Types and Evaluator
+6. **METAP-E002** — Spike: Find Expression Parser
+7. **METAP-E003** — Expression Parser
+8. **METAP-E004** — Metadata Query Engine
+9. **META-F001** — Action Executor
+10. **META-F003** — find Subcommand
+11. **CLIO-G001** — Main Dispatch and Daemon Client
+12. **CLIO-G002** — One-Shot Mode
+13. **PLSH-H003** — Comprehensive Compatibility Tests
+14. **PLSH-H004** — Benchmark Suite and Release
 
-**Critical path story points:** 111 of 147 total (75.5%)
+**Critical path story points:** 84 of 120 total (70%)
 
 ## Build Order Diagram
 
 ```mermaid
 flowchart LR
-    subgraph "Epic A: Foundation"
-        A001[FOUND-A001]
-        A002[FOUND-A002]
-        A003[FOUND-A003]
-        A004[FOUND-A004]
-        A005[FOUND-A005]
-        A006[FOUND-A006]
-        A007[FOUND-A007]
-        A008[FOUND-A008]
+    subgraph "Epic A: Foundation ✅"
+        A001[FOUND-A001]:::done
+        A002[FOUND-A002]:::done
+        A003[FOUND-A003]:::done
+        A004[FOUND-A004]:::done
+        A005[FOUND-A005]:::done
+        A006[FOUND-A006]:::done
+        A007[FOUND-A007]:::done
+        A008[FOUND-A008]:::done
     end
 
     subgraph "Epic B: IPC & Daemon"
@@ -166,6 +165,8 @@ flowchart LR
     D005 --> H003
     F004 --> H003
     H003 --> H004
+
+    classDef done fill:#90EE90,stroke:#333,stroke-width:2px
 ```
 
 ## Phasing Strategy
