@@ -367,6 +367,7 @@ version = "0.1.0"
 dependencies = [
  "criterion",
  "ff-common",
+ "ff-watcher",
  "globset",
  "hashlink",
  "ignore",
@@ -410,6 +411,7 @@ dependencies = [
  "notify",
  "notify-debouncer-mini",
  "tempfile",
+ "thiserror",
  "tracing",
 ]
 
