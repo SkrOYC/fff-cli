@@ -355,6 +355,7 @@ dependencies = [
  "ff-common",
  "ff-ipc",
  "ff-query",
+ "libc",
  "tempfile",
  "tokio",
  "tracing",
