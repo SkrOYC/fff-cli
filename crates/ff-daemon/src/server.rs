@@ -85,7 +85,7 @@ async fn handle_connection<D: QueryDispatcher + 'static>(
             Err(e) => {
                 warn!("decode error: {e}");
                 let error_resp =
-                    ff_ipc::JsonRpcResponse::error(0, JsonRpcError::parse_error(e.to_string()));
+                    ff_ipc::JsonRpcResponse::parse_error(JsonRpcError::parse_error(e.to_string()));
                 framed.send(JsonRpcMessage::Response(error_resp)).await?;
                 continue;
             }
@@ -226,7 +226,7 @@ mod tests {
             process_request(&dispatcher, &request, Duration::from_secs(30)).await;
 
         assert!(notifications.is_empty());
-        assert_eq!(response.id, 1);
+        assert_eq!(response.id, Some(1));
         assert!(response.result.is_some());
         let result = response.result.unwrap();
         assert_eq!(result["status"], "ok");
@@ -240,7 +240,7 @@ mod tests {
             process_request(&dispatcher, &request, Duration::from_secs(30)).await;
 
         assert!(notifications.is_empty());
-        assert_eq!(response.id, 2);
+        assert_eq!(response.id, Some(2));
         let result = response.result.unwrap();
         assert_eq!(result["status"], "shutting_down");
     }
@@ -253,7 +253,7 @@ mod tests {
             process_request(&dispatcher, &request, Duration::from_secs(30)).await;
 
         assert!(notifications.is_empty());
-        assert_eq!(response.id, 3);
+        assert_eq!(response.id, Some(3));
         assert!(response.error.is_some());
         assert_eq!(response.error.unwrap().code, -32601);
     }
@@ -266,7 +266,7 @@ mod tests {
             process_request(&dispatcher, &request, Duration::from_secs(30)).await;
 
         assert!(notifications.is_empty());
-        assert_eq!(response.id, 4);
+        assert_eq!(response.id, Some(4));
         assert!(response.error.is_some());
         assert_eq!(response.error.unwrap().code, -32602);
     }
@@ -283,7 +283,7 @@ mod tests {
             process_request(&dispatcher, &request, Duration::from_secs(30)).await;
 
         assert!(notifications.is_empty());
-        assert_eq!(response.id, 5);
+        assert_eq!(response.id, Some(5));
         assert!(response.result.is_some());
         let result = response.result.unwrap();
         assert_eq!(result["totalMatched"], 0);
@@ -320,7 +320,7 @@ mod tests {
         let response = client.next().await.unwrap().unwrap();
         match response {
             JsonRpcMessage::Response(resp) => {
-                assert_eq!(resp.id, 1);
+                assert_eq!(resp.id, Some(1));
                 assert!(resp.result.is_some());
                 assert_eq!(resp.result.unwrap()["status"], "ok");
             }
@@ -368,7 +368,7 @@ mod tests {
                 let response = client.next().await.unwrap().unwrap();
                 match response {
                     JsonRpcMessage::Response(resp) => {
-                        assert_eq!(resp.id, i);
+                        assert_eq!(resp.id, Some(i));
                     }
                     _ => panic!("expected response"),
                 }
@@ -420,7 +420,7 @@ mod tests {
                 let response = client.next().await.unwrap().unwrap();
                 match response {
                     JsonRpcMessage::Response(resp) => {
-                        assert_eq!(resp.id, i);
+                        assert_eq!(resp.id, Some(i));
                         assert!(resp.result.is_some());
                         assert_eq!(resp.result.unwrap()["status"], "ok");
                     }

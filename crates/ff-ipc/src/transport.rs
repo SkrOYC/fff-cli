@@ -125,7 +125,7 @@ mod tests {
 
         match msg {
             JsonRpcMessage::Response(resp) => {
-                assert_eq!(resp.id, 42);
+                assert_eq!(resp.id, Some(42));
                 assert_eq!(resp.result.unwrap()["totalMatched"], 5);
             }
             _ => panic!("expected response"),

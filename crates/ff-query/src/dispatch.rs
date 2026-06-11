@@ -181,7 +181,7 @@ mod tests {
     async fn stub_dispatcher_ping() {
         let dispatcher = StubDispatcher;
         let result = dispatcher.dispatch_ping(1);
-        assert_eq!(result.response.id, 1);
+        assert_eq!(result.response.id, Some(1));
         assert!(result.response.result.is_some());
         let result_val = result.response.result.unwrap();
         assert_eq!(result_val["status"], "ok");
@@ -191,7 +191,7 @@ mod tests {
     async fn stub_dispatcher_shutdown() {
         let dispatcher = StubDispatcher;
         let result = dispatcher.dispatch_shutdown(2);
-        assert_eq!(result.response.id, 2);
+        assert_eq!(result.response.id, Some(2));
         let result_val = result.response.result.unwrap();
         assert_eq!(result_val["status"], "shutting_down");
     }
@@ -207,7 +207,7 @@ mod tests {
             max_matches: None,
         };
         let result = dispatcher.dispatch_grep(3, params).await;
-        assert_eq!(result.response.id, 3);
+        assert_eq!(result.response.id, Some(3));
         let result_val = result.response.result.unwrap();
         assert_eq!(result_val["totalMatched"], 0);
     }

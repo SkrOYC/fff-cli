@@ -13,7 +13,7 @@ pub struct JsonRpcRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JsonRpcResponse {
     pub jsonrpc: String,
-    pub id: u64,
+    pub id: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -61,7 +61,7 @@ impl JsonRpcResponse {
     pub fn success(id: u64, result: serde_json::Value) -> Self {
         Self {
             jsonrpc: "2.0".to_string(),
-            id,
+            id: Some(id),
             result: Some(result),
             error: None,
         }
@@ -71,7 +71,17 @@ impl JsonRpcResponse {
     pub fn error(id: u64, error: JsonRpcError) -> Self {
         Self {
             jsonrpc: "2.0".to_string(),
-            id,
+            id: Some(id),
+            result: None,
+            error: Some(error),
+        }
+    }
+
+    #[must_use]
+    pub fn parse_error(error: JsonRpcError) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            id: None,
             result: None,
             error: Some(error),
         }
@@ -309,7 +319,7 @@ mod tests {
         let json = serde_json::to_vec(&response).unwrap();
         let decoded: JsonRpcResponse = serde_json::from_slice(&json).unwrap();
 
-        assert_eq!(decoded.id, 1);
+        assert_eq!(decoded.id, Some(1));
         assert!(decoded.result.is_some());
         assert!(decoded.error.is_none());
         assert_eq!(decoded.result.unwrap()["totalMatched"], 183);
@@ -325,12 +335,26 @@ mod tests {
         let json = serde_json::to_vec(&response).unwrap();
         let decoded: JsonRpcResponse = serde_json::from_slice(&json).unwrap();
 
-        assert_eq!(decoded.id, 1);
+        assert_eq!(decoded.id, Some(1));
         assert!(decoded.result.is_none());
         assert!(decoded.error.is_some());
         let err = decoded.error.unwrap();
         assert_eq!(err.code, -32602);
         assert_eq!(err.message, "bad pattern");
+    }
+
+    #[test]
+    fn response_parse_error_has_null_id() {
+        let response = JsonRpcResponse::parse_error(JsonRpcError::parse_error("invalid JSON"));
+
+        let json = serde_json::to_vec(&response).unwrap();
+        let decoded: JsonRpcResponse = serde_json::from_slice(&json).unwrap();
+
+        assert_eq!(decoded.id, None);
+        assert!(decoded.result.is_none());
+        assert!(decoded.error.is_some());
+        let err = decoded.error.unwrap();
+        assert_eq!(err.code, -32700);
     }
 
     #[test]

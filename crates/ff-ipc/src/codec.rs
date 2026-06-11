@@ -129,7 +129,7 @@ mod tests {
         let decoded = codec.decode(&mut buf).unwrap().unwrap();
         match decoded {
             JsonRpcMessage::Response(resp) => {
-                assert_eq!(resp.id, 1);
+                assert_eq!(resp.id, Some(1));
                 assert!(resp.result.is_some());
             }
             _ => panic!("expected response"),
